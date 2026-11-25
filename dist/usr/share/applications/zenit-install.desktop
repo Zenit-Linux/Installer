@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Zainstaluj Zenit Linux
+Name[en]=Install Zenit Linux
+Comment=Uruchom pełnoekranowy instalator
+Exec=/usr/bin/zenit-live-switch installer
+Icon=zenit
+Terminal=false
+Categories=System;
