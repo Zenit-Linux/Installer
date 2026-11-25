@@ -1,24 +1,47 @@
-#!/bin/bash
+#!/usr/bin/zsi
 # Zenit Linux – sesja instalatora: Openbox + pełnoekranowy ekran startowy.
 # Uruchamiana przez display manager (autologin) z /usr/share/xsessions/zenit-installer.desktop.
-export XDG_SESSION_TYPE=x11
-export XDG_CURRENT_DESKTOP=Openbox
-[ -f /etc/zenit/distro.conf ] && . /etc/zenit/distro.conf
+import Std.Os;
 
-xsetroot -solid '#0F0D08' 2>/dev/null
-xset s off -dpms 2>/dev/null
-openbox --config-file /etc/zenit/openbox/rc.xml &
-sleep 1
+# uruchamia program, ignoruje błędy i brak programu (odpowiednik `cmd 2>/dev/null`)
+func quiet($cmd, $args = []) {
+    try { Os.run($cmd, $args); } catch (Exception $e) { }
+    return null;
+}
 
-fails=0
-while true; do
-    choice="$(/usr/bin/zenit-live-chooser)"
-    case "$choice" in
-        install)  fails=0; /usr/bin/zenit-installer ;;
-        live)     /usr/bin/zenit-live-switch live; sleep 60 ;;
-        reboot)   systemctl reboot;   sleep 60 ;;
-        poweroff) systemctl poweroff; sleep 60 ;;
-        *)        fails=$((fails + 1)); [ "$fails" -ge 5 ] && break; sleep 1 ;;
-    esac
-done
-exit 1
+func main() {
+    Os.setEnv("XDG_SESSION_TYPE", "x11");
+    Os.setEnv("XDG_CURRENT_DESKTOP", "Openbox");
+
+    quiet("xsetroot", ["-solid", "#0F0D08"]);
+    quiet("xset", ["s", "off", "-dpms"]);
+    # Openbox w tle (wyjście i stdin odpięte, żeby nie blokować rodzica)
+    Os.shell("openbox --config-file /etc/zenit/openbox/rc.xml >/dev/null 2>&1 </dev/null &");
+    System.sleep(1000);
+
+    $fails = 0;
+    while (true) {
+        $choice = "";
+        try { $choice = trim(Os.run("/usr/bin/zenit-live-chooser")["stdout"]); } catch (Exception $e) { $choice = ""; }
+        if ($choice === "install") {
+            $fails = 0;
+            Os.exec("/usr/bin/zenit-installer");
+        } else if ($choice === "live") {
+            Os.exec("/usr/bin/zenit-live-switch", ["live"]);
+            System.sleep(60000);
+        } else if ($choice === "reboot") {
+            Os.exec("systemctl", ["reboot"]);
+            System.sleep(60000);
+        } else if ($choice === "poweroff") {
+            Os.exec("systemctl", ["poweroff"]);
+            System.sleep(60000);
+        } else {
+            $fails++;
+            if ($fails >= 5) { break; }
+            System.sleep(1000);
+        }
+    }
+    return 1;
+}
+
+exit(main());
