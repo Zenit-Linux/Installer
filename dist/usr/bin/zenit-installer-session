@@ -1,0 +1,24 @@
+#!/bin/bash
+# Zenit Linux – sesja instalatora: Openbox + pełnoekranowy ekran startowy.
+# Uruchamiana przez display manager (autologin) z /usr/share/xsessions/zenit-installer.desktop.
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=Openbox
+[ -f /etc/zenit/distro.conf ] && . /etc/zenit/distro.conf
+
+xsetroot -solid '#0F0D08' 2>/dev/null
+xset s off -dpms 2>/dev/null
+openbox --config-file /etc/zenit/openbox/rc.xml &
+sleep 1
+
+fails=0
+while true; do
+    choice="$(/usr/bin/zenit-live-chooser)"
+    case "$choice" in
+        install)  fails=0; /usr/bin/zenit-installer ;;
+        live)     /usr/bin/zenit-live-switch live; sleep 60 ;;
+        reboot)   systemctl reboot;   sleep 60 ;;
+        poweroff) systemctl poweroff; sleep 60 ;;
+        *)        fails=$((fails + 1)); [ "$fails" -ge 5 ] && break; sleep 1 ;;
+    esac
+done
+exit 1
