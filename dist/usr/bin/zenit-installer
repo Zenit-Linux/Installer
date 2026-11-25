@@ -1,0 +1,3 @@
+#!/bin/bash
+# Uruchamia Calamares jako root, w oknie na cały ekran (reguła w rc.xml Openboxa + branding).
+exec sudo -n -E /usr/bin/calamares "$@"
