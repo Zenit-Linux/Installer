@@ -1,0 +1,20 @@
+#!/bin/bash
+# Przełącza sesję autologin: "live" -> środowisko graficzne systemu live,
+#                           "installer" -> pełnoekranowy instalator (Openbox).
+# Działa jako root (sam wywołuje sudo, jeśli trzeba).
+[ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+. /etc/zenit/distro.conf
+case "$1" in
+    live)      SESSION="$LIVE_SESSION_FILE" ;;
+    installer) SESSION="zenit-installer.desktop" ;;
+    *) echo "Użycie: $0 live|installer" >&2; exit 1 ;;
+esac
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/99-zenit-switch.conf <<EOT
+[Autologin]
+User=$LIVE_USER
+Session=$SESSION
+Relogin=false
+EOT
+# Restart DM w tle – kończy bieżącą sesję i startuje wybraną
+systemd-run --no-block --on-active=1 systemctl restart display-manager.service
