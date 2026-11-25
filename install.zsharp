@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Instaluje wynik build.sh do systemu/rootfs:  sudo DESTDIR=/ścieżka/do/rootfs ./install.sh
+set -euo pipefail
+cd "$(dirname "$0")"
+[ -d dist ] || ./build.sh
+DEST="${DESTDIR:-/}"
+cp -a dist/. "$DEST/"
+echo "Zainstalowano do $DEST"
+echo "Wymagane pakiety w obrazie: calamares python3-PyYAML python3-qt5 openbox sddm sudo xsetroot NetworkManager-applet (opcj.)"
