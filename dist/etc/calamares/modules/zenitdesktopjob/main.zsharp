@@ -1,125 +1,190 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Zenit Linux – instaluje wybrane środowiska graficzne w docelowym systemie (zypper)
-i konfiguruje display manager. Wybór pochodzi z ekranu QML (Global Storage: zenit_desktops)."""
-import os
-import re
-import shutil
+#!/usr/bin/zsi
+# Zenit Linux – instaluje wybrane środowiska graficzne w docelowym systemie (zypper)
+# i konfiguruje display manager. Wybór pochodzi z ekranu QML (Global Storage: zenit_desktops).
+#
+# Uruchamiany przez mostek main.py (Calamares ładuje moduły job tylko przez interfejs Pythona):
+#   /usr/bin/zsi main.zsharp
+# Wejście (zmienne środowiska ustawia mostek):
+#   ZENIT_ROOT      punkt montowania docelowego systemu (rootMountPoint)
+#   ZENIT_DESKTOPS  lista id środowisk rozdzielona przecinkami (zenit_desktops)
+#   ZENIT_JOB_DIR   katalog modułu (z desktops.json)
+# Wyjście (stdout, linie z prefiksem "@@zenit@@ "):
+#   PROGRESS <0..1>               postęp
+#   ERROR<TAB>tytuł<TAB>opis      błąd – mostek zwraca go Calamaresowi; kod wyjścia 1
+import Std.Os;
+import Std.Json;
+import Std.Path;
 
-import libcalamares
-import yaml
-from libcalamares.utils import debug, warning, target_env_call
+# 100-103: sukces z uwagami (restart, nowe repo itp.)
+func zypperOk() { return [0, 100, 101, 102, 103]; }
+func mark() { return "@@zenit@@ "; }
 
-ZYPPER_OK = (0, 100, 101, 102, 103)   # 100-103: sukces z uwagami (restart, nowe repo itp.)
+func progress($x) { echo mark() . "PROGRESS " . $x; return null; }
 
+func fail($title, $msg) {
+    echo mark() . "ERROR\t" . $title . "\t" . $msg;
+    return 1;
+}
 
-def pretty_name():
-    return "Instalacja środowisk graficznych"
+func warning($msg) { eecho("WARNING: " . $msg); return null; }
+func debug($msg) { eecho("DEBUG: " . $msg); return null; }
 
+##
+ * Wywołanie polecenia w chroocie docelowego systemu (odpowiednik target_env_call);
+ * zwraca kod wyjścia, wyjście jest dziedziczone.
+##
+func targetCall($root, $cmd) {
+    $a = [$root];
+    foreach ($cmd as $x) { $a[] = $x; }
+    return Os.exec("chroot", $a);
+}
 
-def read_distro_conf(path="/etc/zenit/distro.conf"):
-    conf = {}
-    try:
-        for line in open(path, encoding="utf-8"):
-            m = re.match(r'^([A-Z_]+)="?(.*?)"?\s*$', line)
-            if m:
-                conf[m.group(1)] = m.group(2)
-    except OSError:
-        warning("Brak %s – zakładam BASE=tumbleweed" % path)
-    return conf
+# Czyta /etc/zenit/distro.conf (linie NAZWA="wartość") do tablicy asocjacyjnej.
+func readDistroConf($path = "/etc/zenit/distro.conf") {
+    $conf = [];
+    if (!Os.isFile($path)) {
+        warning("Brak " . $path . " – zakładam BASE=tumbleweed");
+        return $conf;
+    }
+    foreach (Os.readLines($path) as $raw) {
+        $ln = trim($raw);
+        $eq = index_of($ln, "=");
+        if ($ln === "" || starts_with($ln, "#") || $eq <= 0) { continue; }
+        $name = substr($ln, 0, $eq);
+        $ok = true;
+        foreach (chars($name) as $c) {
+            if (!($c === "_" || (is_alpha($c) && $c === upper($c)))) { $ok = false; }
+        }
+        if (!$ok) { continue; }
+        $val = trim(substr($ln, $eq + 1));
+        if (strlen($val) > 0 && substr($val, 0, 1) === "\"") { $val = substr($val, 1); }
+        if (strlen($val) > 0 && substr($val, strlen($val) - 1, 1) === "\"") { $val = substr($val, 0, strlen($val) - 1); }
+        $conf[$name] = $val;
+    }
+    return $conf;
+}
 
+func zypperInstall($root, $pkgs, $recommends = false) {
+    if (count($pkgs) === 0) { return 0; }
+    $cmd = ["zypper", "--non-interactive", "install", "--auto-agree-with-licenses", "--ignore-unknown"];
+    if (!$recommends) { $cmd[] = "--no-recommends"; }
+    foreach ($pkgs as $p) { $cmd[] = $p; }
+    $rc = targetCall($root, $cmd);
+    if (!in_array($rc, zypperOk())) {
+        warning("zypper zwrócił " . $rc . " dla: " . join($pkgs, " "));
+    }
+    return $rc;
+}
 
-def zypper_install(pkgs, recommends=False):
-    if not pkgs:
-        return 0
-    cmd = ["zypper", "--non-interactive", "install", "--auto-agree-with-licenses", "--ignore-unknown"]
-    if not recommends:
-        cmd.append("--no-recommends")
-    rc = target_env_call(cmd + list(pkgs))
-    if rc not in ZYPPER_OK:
-        warning("zypper zwrócił %s dla: %s" % (rc, " ".join(pkgs)))
-    return rc
-
-
-def configure_display_manager(root, dm):
+func configureDisplayManager($root, $dm) {
     # openSUSE: alternatywa + sysconfig + unit display-manager.service
-    target_env_call(["update-alternatives", "--set", "default-displaymanager",
-                     "/usr/lib/X11/displaymanagers/%s" % dm])
-    path = os.path.join(root, "etc/sysconfig/displaymanager")
-    try:
-        text = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
-        if re.search(r'^DISPLAYMANAGER=', text, re.M):
-            text = re.sub(r'^DISPLAYMANAGER=.*$', 'DISPLAYMANAGER="%s"' % dm, text, flags=re.M)
-        else:
-            text += '\nDISPLAYMANAGER="%s"\n' % dm
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        open(path, "w", encoding="utf-8").write(text)
-    except OSError as e:
-        warning("Nie udało się zapisać %s: %s" % (path, e))
-    if target_env_call(["systemctl", "enable", "display-manager.service"]) != 0:
-        target_env_call(["systemctl", "enable", "%s.service" % dm])
+    targetCall($root, ["update-alternatives", "--set", "default-displaymanager",
+                       "/usr/lib/X11/displaymanagers/" . $dm]);
+    $path = $root . "/etc/sysconfig/displaymanager";
+    try {
+        $lines = Os.isFile($path) ? Os.readLines($path) : [];
+        $found = false;
+        $out = [];
+        foreach ($lines as $ln) {
+            if (starts_with($ln, "DISPLAYMANAGER=")) {
+                $out[] = "DISPLAYMANAGER=\"" . $dm . "\"";
+                $found = true;
+            } else {
+                $out[] = $ln;
+            }
+        }
+        if (!$found) { $out[] = ""; $out[] = "DISPLAYMANAGER=\"" . $dm . "\""; }
+        Os.mkdir(Path.dirname($path));
+        Os.writeFile($path, join($out, "\n") . "\n");
+    } catch (Exception $e) {
+        warning("Nie udało się zapisać " . $path . ": " . $e->getMessage());
+    }
+    if (targetCall($root, ["systemctl", "enable", "display-manager.service"]) !== 0) {
+        targetCall($root, ["systemctl", "enable", $dm . ".service"]);
+    }
+    return null;
+}
 
+func main() {
+    $root = Os.env("ZENIT_ROOT", "");
+    $jobDir = Os.env("ZENIT_JOB_DIR", Path.dirname(Path.absolute(System.args()[0])));
+    if ($root === "") { return fail("Błąd konfiguracji", "Brak ZENIT_ROOT (rootMountPoint)."); }
 
-def run():
-    gs = libcalamares.globalstorage
-    root = gs.value("rootMountPoint")
-    wanted = [x for x in str(gs.value("zenit_desktops") or "plasma").split(",") if x]
+    $wanted = [];
+    foreach (split(Os.env("ZENIT_DESKTOPS", "plasma"), ",") as $x) {
+        if ($x !== "") { $wanted[] = $x; }
+    }
+    if (count($wanted) === 0) { $wanted = ["plasma"]; }
 
-    data = yaml.safe_load(open(os.path.join(libcalamares.job.working_path, "desktops.yaml"), encoding="utf-8"))
-    catalogue = {d["id"]: d for d in data["desktops"]}
-    base = read_distro_conf().get("BASE", "tumbleweed")
+    $data = Json.decode(Os.readFile($jobDir . "/desktops.json"));
+    $catalogue = [];
+    foreach ($data["desktops"] as $d) { $catalogue[$d["id"]] = $d; }
+    $conf = readDistroConf();
+    $base = $conf["BASE"] ?? "tumbleweed";
 
-    chosen = []
-    for did in wanted:
-        d = catalogue.get(did)
-        if not d or d.get("placeholder"):
-            warning("Pomijam %s (nieznane lub placeholder)" % did)
-            continue
-        if d.get("bases") and base not in d["bases"]:
-            warning("Pomijam %s – niedostępne w bazie %s" % (did, base))
-            continue
-        chosen.append(d)
-    if not chosen:
-        return ("Brak środowiska graficznego",
-                "Nie wybrano żadnego dostępnego środowiska graficznego dla bazy %s." % base)
+    $chosen = [];
+    foreach ($wanted as $did) {
+        $d = $catalogue[$did] ?? null;
+        if ($d === null || ($d["placeholder"] ?? false)) {
+            warning("Pomijam " . $did . " (nieznane lub placeholder)");
+            continue;
+        }
+        $bases = $d["bases"] ?? null;
+        if ($bases !== null && count($bases) > 0 && !in_array($base, $bases)) {
+            warning("Pomijam " . $did . " – niedostępne w bazie " . $base);
+            continue;
+        }
+        $chosen[] = $d;
+    }
+    if (count($chosen) === 0) {
+        return fail("Brak środowiska graficznego",
+                    "Nie wybrano żadnego dostępnego środowiska graficznego dla bazy " . $base . ".");
+    }
 
     # DNS wewnątrz chroota (zypper potrzebuje internetu)
-    try:
-        shutil.copy("/etc/resolv.conf", os.path.join(root, "etc/resolv.conf"))
-    except OSError as e:
-        warning("resolv.conf: %s" % e)
+    try {
+        Os.writeFile($root . "/etc/resolv.conf", Os.readFile("/etc/resolv.conf"));
+    } catch (Exception $e) {
+        warning("resolv.conf: " . $e->getMessage());
+    }
 
-    libcalamares.job.setprogress(0.02)
-    target_env_call(["zypper", "--non-interactive", "refresh"])
+    progress(0.02);
+    targetCall($root, ["zypper", "--non-interactive", "refresh"]);
 
     # Wspólne pakiety dla typów sesji
-    types = " ".join(d["type"] for d in chosen)
-    common = []
-    if "X11" in types:
-        common += data["common"]["x11"]
-    if "Wayland" in types:
-        common += data["common"]["wayland"]
-    zypper_install(common)
+    $types = "";
+    foreach ($chosen as $d) { $types .= " " . $d["type"]; }
+    $common = [];
+    if (contains($types, "X11")) { foreach ($data["common"]["x11"] as $p) { $common[] = $p; } }
+    if (contains($types, "Wayland")) { foreach ($data["common"]["wayland"] as $p) { $common[] = $p; } }
+    zypperInstall($root, $common);
 
-    n = len(chosen)
-    for i, d in enumerate(chosen):
-        libcalamares.utils.debug("Instaluję środowisko: %s" % d["name"])
-        rc = zypper_install(d["packages"], recommends=bool(d.get("recommends")))
-        if rc not in ZYPPER_OK and i == 0:
-            return ("Błąd instalacji środowiska %s" % d["name"],
-                    "zypper zakończył się kodem %s. Sprawdź połączenie z internetem i repozytoria." % rc)
-        libcalamares.job.setprogress(0.05 + 0.85 * (i + 1) / n)
+    $n = count($chosen);
+    for ($i = 0; $i < $n; $i++) {
+        $d = $chosen[$i];
+        debug("Instaluję środowisko: " . $d["name"]);
+        $rc = zypperInstall($root, $d["packages"], boolval($d["recommends"] ?? false));
+        if (!in_array($rc, zypperOk()) && $i === 0) {
+            return fail("Błąd instalacji środowiska " . $d["name"],
+                        "zypper zakończył się kodem " . $rc . ". Sprawdź połączenie z internetem i repozytoria.");
+        }
+        progress(0.05 + 0.85 * ($i + 1) / $n);
+    }
 
-    primary = chosen[0]
-    dm = primary.get("dm", "sddm")
-    zypper_install(data["dm_packages"].get(dm, [dm]))
-    configure_display_manager(root, dm)
+    $primary = $chosen[0];
+    $dm = $primary["dm"] ?? "sddm";
+    zypperInstall($root, $data["dm_packages"][$dm] ?? [$dm]);
+    configureDisplayManager($root, $dm);
 
     # Zapamiętaj wybór (informacyjnie)
-    os.makedirs(os.path.join(root, "etc/zenit"), exist_ok=True)
-    with open(os.path.join(root, "etc/zenit/desktops"), "w", encoding="utf-8") as f:
-        f.write("# Środowiska wybrane podczas instalacji (pierwsze = domyślne)\n")
-        f.write("\n".join(d["id"] for d in chosen) + "\n")
+    Os.mkdir($root . "/etc/zenit");
+    $ids = [];
+    foreach ($chosen as $d) { $ids[] = $d["id"]; }
+    Os.writeFile($root . "/etc/zenit/desktops",
+        "# Środowiska wybrane podczas instalacji (pierwsze = domyślne)\n" . join($ids, "\n") . "\n");
 
-    libcalamares.job.setprogress(1.0)
-    return None
+    progress(1.0);
+    return 0;
+}
+
+exit(main());
