@@ -1,3 +1,10 @@
-#!/bin/bash
+#!/usr/bin/zsi
 # Uruchamia Calamares jako root, w oknie na cały ekran (reguła w rc.xml Openboxa + branding).
-exec sudo -n -E /usr/bin/calamares "$@"
+import Std.Os;
+
+func withArgs($a, $b) {
+    foreach ($b as $x) { $a[] = $x; }
+    return $a;
+}
+
+exit(Os.exec("sudo", withArgs(["-n", "-E", "/usr/bin/calamares"], Os.args())));
