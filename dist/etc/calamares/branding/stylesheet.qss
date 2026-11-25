@@ -1,0 +1,73 @@
+/* Zenit Linux – motyw Calamares: złoto na ciepłej czerni (z logo) */
+* { font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; }
+
+QWidget { background-color: #0F0D08; color: #F2E8C8; }
+QLabel, QCheckBox, QRadioButton { background: transparent; }
+
+#mainApp  { background-color: #0F0D08; }
+#sidebarApp { background-color: #14100A; border-right: 1px solid #3A3220; }
+#logoApp  { background: transparent; }
+
+QToolTip { background: #1A160D; color: #F2E8C8; border: 1px solid #D4A93A; }
+
+/* Przyciski */
+QPushButton {
+    background-color: #1F1A0F; color: #F2E8C8;
+    border: 1px solid #5A4A22; border-radius: 8px; padding: 7px 18px;
+}
+QPushButton:hover   { border-color: #D4A93A; background-color: #2A2314; }
+QPushButton:pressed { background-color: #3A3018; }
+QPushButton:disabled { color: #6F6648; border-color: #2E2713; background-color: #15120A; }
+QPushButton:default, #nextButton, #quitButton {
+    background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #F2D675, stop:1 #B8861B);
+    color: #1A1405; border: 1px solid #F2D675; font-weight: bold;
+}
+QPushButton:default:disabled, #nextButton:disabled {
+    background-color: #3A3018; color: #7A6E48; border-color: #3A3018;
+}
+
+/* Pola */
+QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QComboBox {
+    background-color: #17130B; color: #F2E8C8;
+    border: 1px solid #4A3E1E; border-radius: 6px; padding: 5px 8px;
+    selection-background-color: #D4A93A; selection-color: #1A1405;
+}
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus { border: 1px solid #F2D675; }
+QComboBox QAbstractItemView { background: #17130B; selection-background-color: #D4A93A; selection-color: #1A1405; }
+
+/* Listy i tabele */
+QListView, QTreeView, QTableView, QListWidget, QAbstractItemView {
+    background-color: #14100A; alternate-background-color: #19140C;
+    border: 1px solid #3A3220; border-radius: 6px; outline: 0;
+}
+QListView::item:selected, QTreeView::item:selected, QTableView::item:selected {
+    background-color: #D4A93A; color: #1A1405;
+}
+QListView::item:hover, QTreeView::item:hover { background-color: #2A2314; }
+QHeaderView::section { background: #1F1A0F; color: #E8D9A8; border: 0; padding: 5px; }
+
+/* Checkbox / radio */
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px; height: 16px; border: 1px solid #8A7430; background: #17130B;
+}
+QCheckBox::indicator { border-radius: 4px; }
+QRadioButton::indicator { border-radius: 9px; }
+QCheckBox::indicator:checked, QRadioButton::indicator:checked { background: #D4A93A; border-color: #F2D675; }
+
+/* Pasek postępu */
+QProgressBar { background: #17130B; border: 1px solid #4A3E1E; border-radius: 7px; text-align: center; color: #F2E8C8; height: 14px; }
+QProgressBar::chunk {
+    border-radius: 6px;
+    background-color: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #B8861B, stop:1 #F2D675);
+}
+
+/* Paski przewijania */
+QScrollBar:vertical { background: #0F0D08; width: 12px; margin: 0; }
+QScrollBar::handle:vertical { background: #5A4A22; border-radius: 5px; min-height: 30px; }
+QScrollBar::handle:vertical:hover { background: #D4A93A; }
+QScrollBar:horizontal { background: #0F0D08; height: 12px; }
+QScrollBar::handle:horizontal { background: #5A4A22; border-radius: 5px; min-width: 30px; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+
+/* Teksty pomocnicze Calamares */
+QLabel#welcomeText, QLabel#titleLabel { color: #F2D675; }
