@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Zenit Installer
+Comment=Pełnoekranowy instalator Zenit Linux (Openbox)
+Exec=/usr/bin/zenit-installer-session
+TryExec=/usr/bin/zenit-installer-session
+Type=Application
+DesktopNames=Openbox
