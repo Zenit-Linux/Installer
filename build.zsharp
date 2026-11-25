@@ -1,53 +1,165 @@
-#!/usr/bin/env bash
+#!/usr/bin/zsi
 # Zenit Linux – build konfiguracji Calamares + plików live.
-# Użycie:  ./build.sh [plik_distro.conf]        (domyślnie ./distro.conf)
+# Użycie:  ./build.zsharp [plik_distro.conf]        (domyślnie ./distro.conf)
 # Wynik:   dist/  – drzewo plików do nałożenia na rootfs obrazu (overlay Zenit Buildera)
-set -euo pipefail
-cd "$(dirname "$0")"
-CONF="${1:-distro.conf}"
-[ -f "$CONF" ] || { echo "Brak pliku $CONF" >&2; exit 1; }
-# shellcheck disable=SC1090
-source "$CONF"
-OUT="${OUT:-dist}"
-CAL="$OUT/etc/calamares"
+import Std.Os;
+import Std.Path;
 
-echo "==> $DISTRO_NAME $DISTRO_VERSION (baza: $BASE)"
-rm -rf "$OUT"; mkdir -p "$OUT"
-cp -a rootfs/. "$OUT/"
+func die($msg) {
+    eecho($msg);
+    Os.exit(1);
+}
 
-# 1) Szablony *.in -> pliki docelowe (podmiana @ZMIENNA@ z distro.conf)
-VARS=$(grep -oE '^[A-Z_]+=' "$CONF" | tr -d '=')
-while IFS= read -r -d '' f; do
-    out="${f%.in}"; mv "$f" "$out"
-    for v in $VARS; do
-        val="${!v}"; val="${val//\\/\\\\}"; val="${val//|/\\|}"; val="${val//&/\\&}"
-        sed -i "s|@${v}@|${val}|g" "$out"
-    done
-    if grep -qE '@[A-Z_]+@' "$out"; then echo "UWAGA: nierozwiązane zmienne w $out" >&2; fi
-done < <(find "$OUT" -name '*.in' -print0)
+# Uruchamia program z odziedziczonym wyjściem; przerywa build przy niezerowym kodzie.
+func must($what, $cmd, $args = []) {
+    $code = Os.exec($cmd, $args);
+    if ($code !== 0) { die("BŁĄD: " . $what . " — kod wyjścia " . $code); }
+    return null;
+}
 
-# 2) Tożsamość dystrybucji dostępna w systemie live (czytają ją skrypty i moduł Pythona)
-install -Dm644 "$CONF" "$OUT/etc/zenit/distro.conf"
+##
+ * Wczytuje plik distro.conf (linie NAZWA="wartość", jak w `source`).
+ * Zwraca tablicę asocjacyjną NAZWA => wartość (kolejność z pliku).
+##
+func readConf($path) {
+    $conf = [];
+    foreach (Os.readLines($path) as $raw) {
+        $ln = trim($raw);
+        if ($ln === "" || starts_with($ln, "#")) { continue; }
+        $eq = index_of($ln, "=");
+        if ($eq <= 0) { continue; }
+        $name = substr($ln, 0, $eq);
+        $ok = true;
+        foreach (chars($name) as $c) {
+            if (!($c === "_" || (is_alpha($c) && $c === upper($c)))) { $ok = false; }
+        }
+        if (!$ok) { continue; }
+        $rest = substr($ln, $eq + 1);
+        $val = "";
+        if (starts_with($rest, "\"") || starts_with($rest, "'")) {
+            $q = substr($rest, 0, 1);
+            $body = substr($rest, 1);
+            $end = index_of($body, $q);
+            $val = $end < 0 ? $body : substr($body, 0, $end);
+        } else {
+            $sp = index_of($rest, " ");
+            $hs = index_of($rest, "#");
+            $cut = strlen($rest);
+            if ($sp >= 0 && $sp < $cut) { $cut = $sp; }
+            if ($hs >= 0 && $hs < $cut) { $cut = $hs; }
+            $val = substr($rest, 0, $cut);
+        }
+        $conf[$name] = $val;
+    }
+    return $conf;
+}
 
-# 3) Katalog środowisk -> QML (desktops.js) + moduł Pythona (desktops.yaml)
-python3 tools/gen_desktops.py data/desktops.yaml "$BASE" \
-    "$CAL/modules/zenitdesktop/desktops.js" "$CAL/modules/zenitdesktopjob/desktops.yaml"
+# Czy tekst zawiera jeszcze nierozwiązaną zmienną @NAZWA@ ?
+func hasPlaceholder($text) {
+    $parts = split($text, "@");
+    for ($i = 1; $i < count($parts) - 1; $i++) {
+        $p = $parts[$i];
+        if (strlen($p) === 0) { continue; }
+        $ok = true;
+        foreach (chars($p) as $c) {
+            if (!($c === "_" || (is_alpha($c) && $c === upper($c)))) { $ok = false; }
+        }
+        if ($ok) { return true; }
+    }
+    return false;
+}
 
-# 4) Logo (wariant pod ciemny motyw) i ikony
-python3 tools/make_logos.py assets/zenit-logo.png \
-    "$CAL/branding/zenit/zenit-logo.png" "$CAL/branding/zenit/zenit-icon.png"
-install -Dm644 "$CAL/branding/zenit/zenit-logo.png" "$OUT/usr/share/zenit/logo-dark.png"
-install -Dm644 "$CAL/branding/zenit/zenit-icon.png" "$OUT/usr/share/icons/hicolor/256x256/apps/zenit.png"
+# odpowiednik `install -Dm644 src dst`
+func installFile($src, $dst, $mode) {
+    Os.mkdir(Path.dirname($dst));
+    Os.writeFile($dst, Os.readFile($src));
+    Os.chmod($dst, $mode);
+    return null;
+}
 
-# 5) Podglądy środowisk: makiety, a jeśli są prawdziwe zrzuty w assets/previews/<id>.png – one wygrywają
-PREV="$CAL/modules/zenitdesktop/previews"
-python3 tools/make_previews.py data/desktops.yaml "$PREV"
-if [ -d assets/previews ]; then
-    for p in assets/previews/*.png; do [ -e "$p" ] && cp -f "$p" "$PREV/" && echo "   zrzut: $(basename "$p")"; done
-fi
+func countFiles($dir) {
+    $n = 0;
+    foreach (Os.walk($dir) as $p) {
+        if (Os.isFile($p)) { $n++; }
+    }
+    return $n;
+}
 
-# 6) Uprawnienia
-chmod 755 "$OUT"/usr/bin/zenit-*
-chmod 440 "$OUT/etc/sudoers.d/zenit-live"
-find "$OUT" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
-echo "==> Gotowe: $OUT/  ($(find "$OUT" -type f | wc -l) plików)"
+# usuwa katalogi __pycache__ (rekurencyjnie)
+func dropPycache($dir) {
+    foreach (Os.walk($dir) as $p) {
+        if (Os.isDir($p) && Path.basename($p) === "__pycache__") { Os.removeAll($p); }
+    }
+    return null;
+}
+
+func main() {
+    Os.chdir(Path.dirname(Path.absolute(System.args()[0])));
+    $args = Os.args();
+    $confPath = count($args) > 0 ? $args[0] : "distro.conf";
+    if (!Os.isFile($confPath)) { die("Brak pliku " . $confPath); }
+    $conf = readConf($confPath);
+    $out = Os.env("OUT", "dist");
+    $cal = $out . "/etc/calamares";
+    $base = $conf["BASE"] ?? "tumbleweed";
+
+    echo "==> " . ($conf["DISTRO_NAME"] ?? "") . " " . ($conf["DISTRO_VERSION"] ?? "") . " (baza: " . $base . ")";
+    Os.removeAll($out);
+    Os.mkdir($out);
+    must("kopiowanie rootfs", "cp", ["-a", "rootfs/.", $out . "/"]);
+
+    # 1) Szablony *.in -> pliki docelowe (podmiana @ZMIENNA@ z distro.conf)
+    $templates = [];
+    foreach (Os.walk($out) as $p) {
+        if (ends_with($p, ".in") && Os.isFile($p)) { $templates[] = $p; }
+    }
+    foreach ($templates as $f) {
+        $target = substr($f, 0, strlen($f) - 3);
+        Os.rename($f, $target);
+        $text = Os.readFile($target);
+        foreach ($conf as $k => $v) { $text = replace($text, "@" . $k . "@", $v); }
+        Os.writeFile($target, $text);
+        if (hasPlaceholder($text)) { eecho("UWAGA: nierozwiązane zmienne w " . $target); }
+    }
+
+    # 2) Tożsamość dystrybucji dostępna w systemie live (czytają ją skrypty i moduł Z#)
+    installFile($confPath, $out . "/etc/zenit/distro.conf", 420);
+
+    # 3) Katalog środowisk -> QML (desktops.js) + moduł instalacyjny (desktops.yaml)
+    must("gen_desktops", "python3", ["tools/gen_desktops.py", "data/desktops.yaml", $base,
+        $cal . "/modules/zenitdesktop/desktops.js", $cal . "/modules/zenitdesktopjob/desktops.yaml"]);
+
+    # 3b) Ten sam katalog jako JSON – moduł instalacyjny w Z# (stdlib nie ma parsera YAML)
+    must("desktops.json", "python3", ["-c",
+        "import sys,json,yaml; json.dump(yaml.safe_load(open(sys.argv[1], encoding='utf-8')), open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False, indent=2)",
+        $cal . "/modules/zenitdesktopjob/desktops.yaml", $cal . "/modules/zenitdesktopjob/desktops.json"]);
+
+    # 4) Logo (wariant pod ciemny motyw) i ikony
+    must("make_logos", "python3", ["tools/make_logos.py", "assets/zenit-logo.png",
+        $cal . "/branding/zenit/zenit-logo.png", $cal . "/branding/zenit/zenit-icon.png"]);
+    installFile($cal . "/branding/zenit/zenit-logo.png", $out . "/usr/share/zenit/logo-dark.png", 420);
+    installFile($cal . "/branding/zenit/zenit-icon.png", $out . "/usr/share/icons/hicolor/256x256/apps/zenit.png", 420);
+
+    # 5) Podglądy środowisk: makiety, a jeśli są prawdziwe zrzuty w assets/previews/<id>.png – one wygrywają
+    $prev = $cal . "/modules/zenitdesktop/previews";
+    must("make_previews", "python3", ["tools/make_previews.py", "data/desktops.yaml", $prev]);
+    if (Os.isDir("assets/previews")) {
+        foreach (Os.list("assets/previews") as $n) {
+            if (ends_with($n, ".png")) {
+                Os.writeFile($prev . "/" . $n, Os.readFile("assets/previews/" . $n));
+                echo "   zrzut: " . $n;
+            }
+        }
+    }
+
+    # 6) Uprawnienia
+    foreach (Os.list($out . "/usr/bin") as $n) {
+        if (starts_with($n, "zenit-")) { Os.chmod($out . "/usr/bin/" . $n, 493); }
+    }
+    Os.chmod($out . "/etc/sudoers.d/zenit-live", 288);
+    dropPycache($out);
+    echo "==> Gotowe: " . $out . "/  (" . countFiles($out) . " plików)";
+    return 0;
+}
+
+exit(main());
