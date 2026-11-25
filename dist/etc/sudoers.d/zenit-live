@@ -1,0 +1,2 @@
+# Tylko w obrazie live – usuwane po instalacji (shellprocess@cleanup)
+liveuser ALL=(ALL) NOPASSWD: ALL
