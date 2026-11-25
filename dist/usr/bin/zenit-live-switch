@@ -1,20 +1,49 @@
-#!/bin/bash
+#!/usr/bin/zsi
 # Przełącza sesję autologin: "live" -> środowisko graficzne systemu live,
 #                           "installer" -> pełnoekranowy instalator (Openbox).
 # Działa jako root (sam wywołuje sudo, jeśli trzeba).
-[ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
-. /etc/zenit/distro.conf
-case "$1" in
-    live)      SESSION="$LIVE_SESSION_FILE" ;;
-    installer) SESSION="zenit-installer.desktop" ;;
-    *) echo "Użycie: $0 live|installer" >&2; exit 1 ;;
-esac
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/99-zenit-switch.conf <<EOT
-[Autologin]
-User=$LIVE_USER
-Session=$SESSION
-Relogin=false
-EOT
-# Restart DM w tle – kończy bieżącą sesję i startuje wybraną
-systemd-run --no-block --on-active=1 systemctl restart display-manager.service
+import Std.Os;
+import Std.Path;
+
+# Czyta /etc/zenit/distro.conf (linie NAZWA="wartość") do tablicy asocjacyjnej.
+func readDistroConf($path = "/etc/zenit/distro.conf") {
+    $conf = [];
+    if (!Os.isFile($path)) { return $conf; }
+    foreach (Os.readLines($path) as $raw) {
+        $ln = trim($raw);
+        $eq = index_of($ln, "=");
+        if ($ln === "" || starts_with($ln, "#") || $eq <= 0) { continue; }
+        $val = trim(substr($ln, $eq + 1));
+        if (strlen($val) > 0 && substr($val, 0, 1) === "\"") { $val = substr($val, 1); }
+        if (strlen($val) > 0 && substr($val, strlen($val) - 1, 1) === "\"") { $val = substr($val, 0, strlen($val) - 1); }
+        $conf[substr($ln, 0, $eq)] = $val;
+    }
+    return $conf;
+}
+
+func main() {
+    $args = Os.args();
+    $mode = count($args) > 0 ? $args[0] : "";
+    if (trim(Os.run("id", ["-u"])["stdout"]) !== "0") {
+        $self = Path.absolute(System.args()[0]);
+        $a = ["-n", $self];
+        foreach ($args as $x) { $a[] = $x; }
+        return Os.exec("sudo", $a);
+    }
+    $conf = readDistroConf();
+    $session = "";
+    if ($mode === "live") { $session = $conf["LIVE_SESSION_FILE"] ?? ""; }
+    else if ($mode === "installer") { $session = "zenit-installer.desktop"; }
+    else {
+        eecho("Użycie: " . System.args()[0] . " live|installer");
+        return 1;
+    }
+    Os.mkdir("/etc/sddm.conf.d");
+    Os.writeFile("/etc/sddm.conf.d/99-zenit-switch.conf",
+        "[Autologin]\nUser=" . ($conf["LIVE_USER"] ?? "liveuser") . "\nSession=" . $session . "\nRelogin=false\n");
+    # Restart DM w tle – kończy bieżącą sesję i startuje wybraną
+    Os.run("systemd-run", ["--no-block", "--on-active=1", "systemctl", "restart", "display-manager.service"]);
+    return 0;
+}
+
+exit(main());
