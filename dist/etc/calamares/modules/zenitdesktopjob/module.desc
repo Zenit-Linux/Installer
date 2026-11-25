@@ -1,6 +1,6 @@
 ---
 type:      "job"
 name:      "zenitdesktopjob"
-interface: "python"
-script:    "main.py"
+interface: "Z#"
+script:    "main.zsharp"
 noconfig:  true
