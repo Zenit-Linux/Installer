@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Zenit Linux – build konfiguracji Calamares + plików live.
+# Użycie:  ./build.sh [plik_distro.conf]        (domyślnie ./distro.conf)
+# Wynik:   dist/  – drzewo plików do nałożenia na rootfs obrazu (overlay Zenit Buildera)
+set -euo pipefail
+cd "$(dirname "$0")"
+CONF="${1:-distro.conf}"
+[ -f "$CONF" ] || { echo "Brak pliku $CONF" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$CONF"
+OUT="${OUT:-dist}"
+CAL="$OUT/etc/calamares"
+
+echo "==> $DISTRO_NAME $DISTRO_VERSION (baza: $BASE)"
+rm -rf "$OUT"; mkdir -p "$OUT"
+cp -a rootfs/. "$OUT/"
+
+# 1) Szablony *.in -> pliki docelowe (podmiana @ZMIENNA@ z distro.conf)
+VARS=$(grep -oE '^[A-Z_]+=' "$CONF" | tr -d '=')
+while IFS= read -r -d '' f; do
+    out="${f%.in}"; mv "$f" "$out"
+    for v in $VARS; do
+        val="${!v}"; val="${val//\\/\\\\}"; val="${val//|/\\|}"; val="${val//&/\\&}"
+        sed -i "s|@${v}@|${val}|g" "$out"
+    done
+    if grep -qE '@[A-Z_]+@' "$out"; then echo "UWAGA: nierozwiązane zmienne w $out" >&2; fi
+done < <(find "$OUT" -name '*.in' -print0)
+
+# 2) Tożsamość dystrybucji dostępna w systemie live (czytają ją skrypty i moduł Pythona)
+install -Dm644 "$CONF" "$OUT/etc/zenit/distro.conf"
+
+# 3) Katalog środowisk -> QML (desktops.js) + moduł Pythona (desktops.yaml)
+python3 tools/gen_desktops.py data/desktops.yaml "$BASE" \
+    "$CAL/modules/zenitdesktop/desktops.js" "$CAL/modules/zenitdesktopjob/desktops.yaml"
+
+# 4) Logo (wariant pod ciemny motyw) i ikony
+python3 tools/make_logos.py assets/zenit-logo.png \
+    "$CAL/branding/zenit/zenit-logo.png" "$CAL/branding/zenit/zenit-icon.png"
+install -Dm644 "$CAL/branding/zenit/zenit-logo.png" "$OUT/usr/share/zenit/logo-dark.png"
+install -Dm644 "$CAL/branding/zenit/zenit-icon.png" "$OUT/usr/share/icons/hicolor/256x256/apps/zenit.png"
+
+# 5) Podglądy środowisk: makiety, a jeśli są prawdziwe zrzuty w assets/previews/<id>.png – one wygrywają
+PREV="$CAL/modules/zenitdesktop/previews"
+python3 tools/make_previews.py data/desktops.yaml "$PREV"
+if [ -d assets/previews ]; then
+    for p in assets/previews/*.png; do [ -e "$p" ] && cp -f "$p" "$PREV/" && echo "   zrzut: $(basename "$p")"; done
+fi
+
+# 6) Uprawnienia
+chmod 755 "$OUT"/usr/bin/zenit-*
+chmod 440 "$OUT/etc/sudoers.d/zenit-live"
+find "$OUT" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+echo "==> Gotowe: $OUT/  ($(find "$OUT" -type f | wc -l) plików)"
