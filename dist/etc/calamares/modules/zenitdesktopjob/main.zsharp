@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Zenit Linux – instaluje wybrane środowiska graficzne w docelowym systemie (zypper)
+i konfiguruje display manager. Wybór pochodzi z ekranu QML (Global Storage: zenit_desktops)."""
+import os
+import re
+import shutil
+
+import libcalamares
+import yaml
+from libcalamares.utils import debug, warning, target_env_call
+
+ZYPPER_OK = (0, 100, 101, 102, 103)   # 100-103: sukces z uwagami (restart, nowe repo itp.)
+
+
+def pretty_name():
+    return "Instalacja środowisk graficznych"
+
+
+def read_distro_conf(path="/etc/zenit/distro.conf"):
+    conf = {}
+    try:
+        for line in open(path, encoding="utf-8"):
+            m = re.match(r'^([A-Z_]+)="?(.*?)"?\s*$', line)
+            if m:
+                conf[m.group(1)] = m.group(2)
+    except OSError:
+        warning("Brak %s – zakładam BASE=tumbleweed" % path)
+    return conf
+
+
+def zypper_install(pkgs, recommends=False):
+    if not pkgs:
+        return 0
+    cmd = ["zypper", "--non-interactive", "install", "--auto-agree-with-licenses", "--ignore-unknown"]
+    if not recommends:
+        cmd.append("--no-recommends")
+    rc = target_env_call(cmd + list(pkgs))
+    if rc not in ZYPPER_OK:
+        warning("zypper zwrócił %s dla: %s" % (rc, " ".join(pkgs)))
+    return rc
+
+
+def configure_display_manager(root, dm):
+    # openSUSE: alternatywa + sysconfig + unit display-manager.service
+    target_env_call(["update-alternatives", "--set", "default-displaymanager",
+                     "/usr/lib/X11/displaymanagers/%s" % dm])
+    path = os.path.join(root, "etc/sysconfig/displaymanager")
+    try:
+        text = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+        if re.search(r'^DISPLAYMANAGER=', text, re.M):
+            text = re.sub(r'^DISPLAYMANAGER=.*$', 'DISPLAYMANAGER="%s"' % dm, text, flags=re.M)
+        else:
+            text += '\nDISPLAYMANAGER="%s"\n' % dm
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w", encoding="utf-8").write(text)
+    except OSError as e:
+        warning("Nie udało się zapisać %s: %s" % (path, e))
+    if target_env_call(["systemctl", "enable", "display-manager.service"]) != 0:
+        target_env_call(["systemctl", "enable", "%s.service" % dm])
+
+
+def run():
+    gs = libcalamares.globalstorage
+    root = gs.value("rootMountPoint")
+    wanted = [x for x in str(gs.value("zenit_desktops") or "plasma").split(",") if x]
+
+    data = yaml.safe_load(open(os.path.join(libcalamares.job.working_path, "desktops.yaml"), encoding="utf-8"))
+    catalogue = {d["id"]: d for d in data["desktops"]}
+    base = read_distro_conf().get("BASE", "tumbleweed")
+
+    chosen = []
+    for did in wanted:
+        d = catalogue.get(did)
+        if not d or d.get("placeholder"):
+            warning("Pomijam %s (nieznane lub placeholder)" % did)
+            continue
+        if d.get("bases") and base not in d["bases"]:
+            warning("Pomijam %s – niedostępne w bazie %s" % (did, base))
+            continue
+        chosen.append(d)
+    if not chosen:
+        return ("Brak środowiska graficznego",
+                "Nie wybrano żadnego dostępnego środowiska graficznego dla bazy %s." % base)
+
+    # DNS wewnątrz chroota (zypper potrzebuje internetu)
+    try:
+        shutil.copy("/etc/resolv.conf", os.path.join(root, "etc/resolv.conf"))
+    except OSError as e:
+        warning("resolv.conf: %s" % e)
+
+    libcalamares.job.setprogress(0.02)
+    target_env_call(["zypper", "--non-interactive", "refresh"])
+
+    # Wspólne pakiety dla typów sesji
+    types = " ".join(d["type"] for d in chosen)
+    common = []
+    if "X11" in types:
+        common += data["common"]["x11"]
+    if "Wayland" in types:
+        common += data["common"]["wayland"]
+    zypper_install(common)
+
+    n = len(chosen)
+    for i, d in enumerate(chosen):
+        libcalamares.utils.debug("Instaluję środowisko: %s" % d["name"])
+        rc = zypper_install(d["packages"], recommends=bool(d.get("recommends")))
+        if rc not in ZYPPER_OK and i == 0:
+            return ("Błąd instalacji środowiska %s" % d["name"],
+                    "zypper zakończył się kodem %s. Sprawdź połączenie z internetem i repozytoria." % rc)
+        libcalamares.job.setprogress(0.05 + 0.85 * (i + 1) / n)
+
+    primary = chosen[0]
+    dm = primary.get("dm", "sddm")
+    zypper_install(data["dm_packages"].get(dm, [dm]))
+    configure_display_manager(root, dm)
+
+    # Zapamiętaj wybór (informacyjnie)
+    os.makedirs(os.path.join(root, "etc/zenit"), exist_ok=True)
+    with open(os.path.join(root, "etc/zenit/desktops"), "w", encoding="utf-8") as f:
+        f.write("# Środowiska wybrane podczas instalacji (pierwsze = domyślne)\n")
+        f.write("\n".join(d["id"] for d in chosen) + "\n")
+
+    libcalamares.job.setprogress(1.0)
+    return None
