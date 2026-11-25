@@ -1,1 +1,107 @@
+# Katalog środowisk graficznych Zenit Linux.
+# Pola: id, name, desc, session, type, dm, packages, recommends, placeholder,
+#       bases (dozwolone bazy; domyślnie wszystkie), preview{layout,accent,wall,bar}
+# Układy podglądu: panel-bottom | gnome | top-dock | top-bottom | tiling | minimal
+desktops:
+- {id: plasma, name: "KDE Plasma", type: "X11 + Wayland", dm: sddm, recommends: true,
+   desc: "Nowoczesne, w pełni konfigurowalne środowisko. Domyślny wybór Zenit Linux.",
+   packages: ["pattern:kde_plasma"],
+   preview: {layout: panel-bottom, accent: "#3DAEE9", wall: ["#1B2A49", "#6A3C8F"]}}
+- {id: gnome, name: "GNOME", type: "Wayland + X11", dm: gdm, recommends: true,
+   desc: "Minimalistyczny, nowoczesny pulpit z widokiem Activities.",
+   packages: ["pattern:gnome_basic"],
+   preview: {layout: gnome, accent: "#3584E4", wall: ["#2B3A67", "#C06C84"]}}
+- {id: xfce, name: "Xfce", type: "X11", dm: sddm,
+   desc: "Lekki, stabilny i szybki pulpit w klasycznym układzie.",
+   packages: ["pattern:xfce_basic"],
+   preview: {layout: top-bottom, accent: "#2E9AD6", wall: ["#16324F", "#2A7F8E"]}}
+- {id: wayfire, name: "Wayfire", type: "Wayland", dm: sddm,
+   desc: "Kompozytor Wayland w stylu Compiza: efekty, animacje, wtyczki.",
+   packages: ["wayfire", "wcm", "wf-shell", "foot", "wofi"], bases: [tumbleweed, slowroll],
+   preview: {layout: top-dock, accent: "#E0A526", wall: ["#10243F", "#7B2D6B"]}}
+- {id: cosmic, name: "COSMIC", type: "Wayland", dm: sddm,
+   desc: "Nowe środowisko System76 napisane w Rust. Kafelkowanie i klasyczny pulpit.",
+   packages: ["pattern:cosmic", "cosmic-session", "cosmic-comp", "cosmic-panel", "cosmic-settings", "cosmic-applets"],
+   bases: [tumbleweed, slowroll],
+   preview: {layout: top-dock, accent: "#63D0DF", wall: ["#101820", "#3B2A5A"]}}
+- {id: lxde, name: "LXDE", type: "X11", dm: sddm,
+   desc: "Ultralekki pulpit dla starszych komputerów.",
+   packages: ["pattern:lxde"],
+   preview: {layout: panel-bottom, accent: "#5C9E31", wall: ["#2C3E50", "#4CA1AF"]}}
+- {id: lxqt, name: "LXQt", type: "X11 + Wayland", dm: sddm,
+   desc: "Lekkie środowisko oparte na Qt – szybkie i oszczędne.",
+   packages: ["pattern:lxqt"],
+   preview: {layout: panel-bottom, accent: "#4CA3DD", wall: ["#232F3E", "#5B86E5"]}}
+- {id: blue, name: "Blue Environment", type: "Wkrótce", dm: sddm, placeholder: true,
+   desc: "Własne środowisko Zenit Linux – w przygotowaniu. Placeholder.",
+   packages: [],
+   preview: {layout: top-dock, accent: "#2F6BFF", wall: ["#0A1B4D", "#2F6BFF"]}}
+- {id: mate, name: "MATE", type: "X11", dm: sddm,
+   desc: "Klasyczny pulpit w tradycji GNOME 2.",
+   packages: ["pattern:mate_basis"],
+   preview: {layout: top-bottom, accent: "#87A752", wall: ["#2D4A3E", "#7A9E7E"]}}
+- {id: cinnamon, name: "Cinnamon", type: "X11", dm: sddm,
+   desc: "Elegancki, tradycyjny pulpit znany z Linux Mint.",
+   packages: ["cinnamon", "cinnamon-session", "cinnamon-control-center", "nemo", "cinnamon-screensaver"],
+   preview: {layout: panel-bottom, accent: "#9AC15E", wall: ["#273B2E", "#5E8F6D"]}}
+- {id: budgie, name: "Budgie", type: "X11 + Wayland", dm: sddm,
+   desc: "Prosty i elegancki pulpit z panelem i widokiem Raven.",
+   packages: ["budgie-desktop", "budgie-desktop-view", "budgie-control-center"], bases: [tumbleweed, slowroll],
+   preview: {layout: top-dock, accent: "#5294E2", wall: ["#1F2B47", "#4E6FAE"]}}
+- {id: enlightenment, name: "Enlightenment", type: "X11 + Wayland", dm: sddm,
+   desc: "Efektowny i bardzo oszczędny menedżer okien z półką (Shelf).",
+   packages: ["pattern:enlightenment"],
+   preview: {layout: minimal, accent: "#4CC9F0", wall: ["#0B132B", "#3A506B"]}}
+- {id: sway, name: "Sway", type: "Wayland", dm: sddm,
+   desc: "Kafelkowy kompozytor Wayland zgodny z i3.",
+   packages: ["sway", "waybar", "foot", "wofi", "swaylock", "swayidle", "swaybg", "grim", "slurp", "mako"],
+   preview: {layout: tiling, bar: top, accent: "#4C7899", wall: ["#101418", "#26333F"]}}
+- {id: hyprland, name: "Hyprland", type: "Wayland", dm: sddm,
+   desc: "Kafelkowy kompozytor Wayland z płynnymi animacjami.",
+   packages: ["hyprland", "waybar", "foot", "wofi", "hyprpaper", "xdg-desktop-portal-hyprland"], bases: [tumbleweed, slowroll],
+   preview: {layout: tiling, bar: top, accent: "#33CCFF", wall: ["#1A1033", "#6D2E6E"]}}
+- {id: i3, name: "i3", type: "X11", dm: sddm,
+   desc: "Klasyczny kafelkowy menedżer okien sterowany z klawiatury.",
+   packages: ["i3", "i3status", "i3lock", "dmenu", "rofi", "feh", "picom", "alacritty"],
+   preview: {layout: tiling, bar: bottom, accent: "#E8E8E8", wall: ["#111111", "#2B2B2B"]}}
+- {id: openbox, name: "Openbox", type: "X11", dm: sddm,
+   desc: "Minimalistyczny menedżer okien z menu pod prawym przyciskiem.",
+   packages: ["openbox", "tint2", "obconf", "pcmanfm", "feh", "lxappearance"],
+   preview: {layout: minimal, accent: "#6FA8DC", wall: ["#1C1C28", "#34345A"]}}
+- {id: fluxbox, name: "Fluxbox", type: "X11", dm: sddm,
+   desc: "Szybki menedżer okien z kartami i prostą konfiguracją.",
+   packages: ["fluxbox", "pcmanfm", "feh"],
+   preview: {layout: minimal, accent: "#3F8FD6", wall: ["#102A43", "#486581"]}}
+- {id: icewm, name: "IceWM", type: "X11", dm: sddm,
+   desc: "Lekki menedżer okien w stylu klasycznych pulpitów.",
+   packages: ["icewm", "pcmanfm"],
+   preview: {layout: panel-bottom, accent: "#7AA2C9", wall: ["#2F3E52", "#5D7B99"]}}
+- {id: jwm, name: "JWM", type: "X11", dm: sddm,
+   desc: "Joe's Window Manager – bardzo mały i szybki.",
+   packages: ["jwm", "pcmanfm", "feh"],
+   preview: {layout: panel-bottom, accent: "#C98A3B", wall: ["#2B2118", "#59432C"]}}
+- {id: awesome, name: "Awesome", type: "X11", dm: sddm,
+   desc: "Kafelkowy menedżer okien konfigurowany w Lua.",
+   packages: ["awesome", "rofi", "feh", "picom", "alacritty"],
+   preview: {layout: tiling, bar: top, accent: "#5FA8D3", wall: ["#0D1B2A", "#1B3A57"]}}
+- {id: bspwm, name: "bspwm", type: "X11", dm: sddm,
+   desc: "Kafelkowy menedżer okien oparty na drzewie binarnym.",
+   packages: ["bspwm", "sxhkd", "polybar", "rofi", "feh", "picom", "alacritty"],
+   preview: {layout: tiling, bar: top, accent: "#D96C75", wall: ["#161320", "#3A2E4F"]}}
+- {id: qtile, name: "Qtile", type: "X11 + Wayland", dm: sddm,
+   desc: "Kafelkowy menedżer okien w całości napisany i konfigurowany w Pythonie.",
+   packages: ["qtile", "rofi", "feh", "alacritty"], bases: [tumbleweed, slowroll],
+   preview: {layout: tiling, bar: bottom, accent: "#4AA3A2", wall: ["#0F2027", "#2C5364"]}}
+- {id: labwc, name: "Labwc", type: "Wayland", dm: sddm,
+   desc: "Stosowy kompozytor Wayland inspirowany Openboxem.",
+   packages: ["labwc", "waybar", "foot", "wofi", "swaybg"], bases: [tumbleweed, slowroll],
+   preview: {layout: minimal, accent: "#8FB6D9", wall: ["#1B2430", "#3D5A80"]}}
 
+# Pakiety pomocnicze doinstalowywane zależnie od typu sesji
+common:
+  x11: ["xorg-x11-server", "xf86-input-libinput", "xrdb", "xsetroot"]
+  wayland: ["xorg-x11-server-Xwayland"]
+dm_packages:
+  sddm: ["sddm", "sddm-qt6"]
+  gdm: ["gdm"]
+  lightdm: ["lightdm", "lightdm-gtk-greeter"]
