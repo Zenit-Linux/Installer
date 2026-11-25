@@ -1,1 +1,6 @@
-
+---
+type:      "view"
+name:      "zenitdesktop"
+interface: "qtquick"
+qmlPath:   "zenitdesktop.qml"
+noconfig:  true
