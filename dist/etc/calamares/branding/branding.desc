@@ -1,0 +1,42 @@
+# Zenit Linux – branding Calamares (szablon; wartości z distro.conf)
+---
+componentName: zenit
+
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+
+# Instalator na cały ekran
+windowExpanding: fullscreen
+windowSize: 1024px,640px
+windowPlacement: center
+
+strings:
+    productName:         "Zenit Linux"
+    shortProductName:    "Zenit"
+    version:             "1.0"
+    shortVersion:        "1.0"
+    versionedName:       "Zenit Linux 1.0"
+    shortVersionedName:  "Zenit 1.0"
+    bootloaderEntryName: "Zenit Linux"
+    productUrl:          "https://zenit-linux.org"
+    supportUrl:          "https://zenit-linux.org/support"
+    knownIssuesUrl:      "https://zenit-linux.org/bugs"
+    releaseNotesUrl:     "https://zenit-linux.org/release-notes"
+    donateUrl:           "https://zenit-linux.org"
+
+images:
+    productLogo:    "zenit-logo.png"
+    productIcon:    "zenit-icon.png"
+    productWelcome: "zenit-logo.png"
+
+slideshow:    "show.qml"
+slideshowAPI: 2
+
+# Paleta z logo: złoto (#D4A93A / #F2D675) na ciepłej czerni
+style:
+    SidebarBackground:        "#14100A"
+    SidebarText:              "#E8D9A8"
+    SidebarBackgroundCurrent: "#D4A93A"
+    SidebarTextCurrent:       "#1A1405"
+    SidebarTextSelect:        "#D4A93A"
+    SidebarTextHighlight:     "#F2D675"
