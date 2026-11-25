@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Zenit Linux – pełnoekranowy ekran startowy live: Instalacja / Tryb live.
+Na stdout wypisuje: install | live | reboot | poweroff.  Wymaga python3-qt5 (fallback: yad)."""
+import os, re, subprocess, sys
+
+LOGO = "/usr/share/zenit/logo-dark.png"
+GOLD, GOLD_L, BG, TXT = "#D4A93A", "#F2D675", "#0F0D08", "#F2E8C8"
+
+def conf():
+    c = {}
+    try:
+        for l in open("/etc/zenit/distro.conf", encoding="utf-8"):
+            m = re.match(r'^([A-Z_]+)="?(.*?)"?\s*$', l)
+            if m: c[m.group(1)] = m.group(2)
+    except OSError: pass
+    return c
+
+NAME = conf().get("DISTRO_NAME", "Zenit Linux")
+
+def with_qt():
+    from PyQt5 import QtWidgets, QtGui, QtCore
+    app = QtWidgets.QApplication(sys.argv)
+    result = {"v": ""}
+    w = QtWidgets.QWidget()
+    w.setWindowTitle("zenit-live-chooser")
+    w.setStyleSheet(f"""
+        QWidget {{ background:{BG}; color:{TXT}; font-family:'Inter','Noto Sans','DejaVu Sans'; }}
+        QPushButton#big {{ min-width:340px; min-height:120px; font-size:22px; font-weight:bold;
+            border:2px solid #5A4A22; border-radius:16px; background:#1A160D; }}
+        QPushButton#big:hover {{ border-color:{GOLD}; background:#241D0F; }}
+        QPushButton#primary {{ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 {GOLD_L},stop:1 #B8861B);
+            color:#1A1405; border:2px solid {GOLD_L}; }}
+        QPushButton#small {{ border:1px solid #3A3220; border-radius:8px; padding:8px 16px; background:#14100A; }}
+        QPushButton#small:hover {{ border-color:{GOLD}; }}
+        QLabel#sub {{ color:#A99C74; font-size:15px; }}
+    """)
+    def pick(v):
+        result["v"] = v; app.quit()
+    lay = QtWidgets.QVBoxLayout(w); lay.setAlignment(QtCore.Qt.AlignCenter); lay.setSpacing(18)
+    logo = QtWidgets.QLabel(); logo.setAlignment(QtCore.Qt.AlignCenter)
+    pm = QtGui.QPixmap(LOGO)
+    if not pm.isNull(): logo.setPixmap(pm.scaledToHeight(260, QtCore.Qt.SmoothTransformation))
+    lay.addWidget(logo)
+    sub = QtWidgets.QLabel("Co chcesz zrobić?"); sub.setObjectName("sub"); sub.setAlignment(QtCore.Qt.AlignCenter)
+    lay.addWidget(sub)
+    row = QtWidgets.QHBoxLayout(); row.setSpacing(28); row.setAlignment(QtCore.Qt.AlignCenter)
+    b1 = QtWidgets.QPushButton(f"Zainstaluj\n{NAME}"); b1.setObjectName("big"); b1.setProperty("id", "primary")
+    b1.setStyleSheet("QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 %s,stop:1 #B8861B);"
+                     "color:#1A1405;border:2px solid %s;}" % (GOLD_L, GOLD_L))
+    b2 = QtWidgets.QPushButton("Wypróbuj\n(tryb live)"); b2.setObjectName("big")
+    b1.clicked.connect(lambda: pick("install")); b2.clicked.connect(lambda: pick("live"))
+    row.addWidget(b1); row.addWidget(b2); lay.addLayout(row)
+    bar = QtWidgets.QHBoxLayout(); bar.setAlignment(QtCore.Qt.AlignCenter); bar.setSpacing(12)
+    if any(os.access(os.path.join(p, "nm-connection-editor"), os.X_OK) for p in os.environ.get("PATH", "").split(":")):
+        nb = QtWidgets.QPushButton("Sieć / Wi-Fi"); nb.setObjectName("small")
+        nb.clicked.connect(lambda: subprocess.Popen(["nm-connection-editor"])); bar.addWidget(nb)
+    for label, v in (("Uruchom ponownie", "reboot"), ("Wyłącz", "poweroff")):
+        b = QtWidgets.QPushButton(label); b.setObjectName("small"); b.clicked.connect(lambda _, v=v: pick(v)); bar.addWidget(b)
+    lay.addLayout(bar)
+    w.showFullScreen()
+    app.exec_()
+    return result["v"]
+
+def with_yad():
+    rc = subprocess.call(["yad", "--title", NAME, "--text", f"<big><b>{NAME}</b></big>\nCo chcesz zrobić?",
+                          "--button", "Zainstaluj:10", "--button", "Tryb live:20",
+                          "--button", "Restart:30", "--button", "Wyłącz:40", "--center", "--fullscreen"])
+    return {10: "install", 20: "live", 30: "reboot", 40: "poweroff"}.get(rc, "")
+
+if __name__ == "__main__":
+    try:
+        choice = with_qt()
+    except ImportError:
+        choice = with_yad()
+    print(choice)
